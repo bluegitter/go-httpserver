@@ -51,11 +51,13 @@ func rotateLogFile() error {
 	}
 
 	// 创建一个新的 server.log 文件
-	file, err := os.Create("server.log")
+	file, err := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		return err
 	}
-	file.Close()
+
+	// 更新 fileLogger 以使用新的文件
+	fileLogger.SetOutput(file)
 
 	// 更新 lastLogDate 为今天
 	lastLogDate = time.Now().Truncate(24 * time.Hour)
@@ -180,4 +182,5 @@ func main() {
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		consoleLogger.Fatal("Error starting server: ", err)
 	}
+
 }
