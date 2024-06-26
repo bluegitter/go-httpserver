@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
 const maxLogFiles = 10
@@ -160,6 +164,43 @@ func logRequest(handler http.Handler) http.HandlerFunc {
 	}
 }
 
+var ctx = context.Background()
+var redisClient *redis.Client
+
+// 定义一个结构体用于JSON响应
+type CountResponse struct {
+	Page  string `json:"page"`
+	Count int64  `json:"count"`
+}
+
+func countHandler(w http.ResponseWriter, r *http.Request) {
+	page := r.URL.Query().Get("page")
+	if page == "" {
+		http.Error(w, "Page parameter is missing", http.StatusBadRequest)
+		return
+	}
+
+	redisKey := "page.count." + page
+
+	newCount, err := redisClient.Incr(ctx, redisKey).Result()
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// 创建响应对象
+	response := CountResponse{
+		Page:  page,
+		Count: newCount,
+	}
+
+	// 设置响应头为JSON
+	w.Header().Set("Content-Type", "application/json")
+
+	// 编码并发送JSON响应
+	json.NewEncoder(w).Encode(response)
+}
+
 func main() {
 	// 定义命令行参数，默认端口为 8080
 	var port string
@@ -174,6 +215,7 @@ func main() {
 
 	lastLogDate = time.Now().Truncate(24 * time.Hour)
 
+	http.HandleFunc("/count", countHandler)
 	// 设置文件服务器
 	fileServer := http.FileServer(http.Dir("."))
 	http.Handle("/", logRequest(fileServer))
